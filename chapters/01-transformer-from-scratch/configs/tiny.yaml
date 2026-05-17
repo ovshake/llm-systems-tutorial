@@ -1,0 +1,33 @@
+# 10M-param tiny model on TinyShakespeare. Runs in minutes on any A100.
+model:
+  vocab_size: 50257
+  n_layers: 6
+  n_heads: 6
+  n_kv_heads: 6
+  hidden_size: 384
+  intermediate_size: 1536
+  context_length: 512
+  rope_base: 10000.0
+  dropout: 0.0
+  use_grad_checkpoint: false
+
+data:
+  train_path: data/tinyshakespeare/train.bin
+  val_path:   data/tinyshakespeare/val.bin
+
+seq_len: 256
+micro_batch: 32
+accum_steps: 1
+total_steps: 1000
+warmup_steps: 100
+lr: 0.0006
+min_lr: 0.00006
+betas: [0.9, 0.95]
+weight_decay: 0.1
+grad_clip: 1.0
+bf16: true
+compile: false
+log_every: 10
+save_every: 500
+
+out_dir: runs/tiny

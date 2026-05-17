@@ -1,0 +1,51 @@
+[project]
+name = "llm-systems-tutorial"
+version = "0.1.0"
+description = "Hands-on course: from PyTorch fundamentals to vLLM / SGLang / Megatron-style systems work."
+requires-python = ">=3.10,<3.13"
+readme = "README.md"
+
+# Baseline dependencies shared across most chapters.
+# Chapters that need exotic packages (DeepSpeed, Megatron, Nanotron, vLLM, SGLang, Triton, CUTLASS, etc.)
+# pin them inside their own pyproject.toml or requirements.txt to avoid global churn.
+dependencies = [
+    "torch>=2.4.0",
+    "numpy",
+    "tqdm",
+    "datasets",
+    "sentencepiece",
+    "tokenizers",
+    "transformers",
+    "matplotlib",
+    "rich",
+    "psutil",
+    "pynvml",
+    "tensorboard",
+    "wandb",
+    "tiktoken",
+    "einops",
+    "pytest",
+]
+
+[project.optional-dependencies]
+# Per-chapter optional groups so you only install what you need.
+flash = ["flash-attn>=2.5.0"]
+triton = ["triton>=3.0.0"]
+deepspeed = ["deepspeed"]
+profiling = ["scalene", "py-spy"]
+dev = ["ruff", "black", "mypy", "ipython"]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["shared*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP"]
+ignore = ["E501"]
