@@ -88,6 +88,27 @@ The chapter "Self-check" questions are a more granular version of this list.
 
 ---
 
+## Reading track (parallel)
+
+`chapters/` teaches you to *use* the GPU stack. There's a separate track, [`reading-track/`](reading-track/), that teaches you to *read about* it — SemiAnalysis articles, NVIDIA whitepapers, Hot Chips talks. It's a parallel resource you can dip into anytime; the chapters do not depend on it.
+
+| # | Topic |
+|---|---|
+| 00 | Hardware fluency — SMs, memory hierarchy, cluster, the vocabulary |
+| 01 | Tensor core evolution — V100 → A100 → H100 → B200, MMA shapes |
+| 02 | Memory spaces — registers, SMEM, L2, HBM, DSMEM, TMA, TMEM |
+| 03 | Numeric formats — FP32 / BF16 / FP8 / MXFP4 / NVFP4 |
+| 04 | PTX and SASS — how to read low-level GPU code |
+| 05 | Interconnect — NVLink, NVSwitch, NVL72, InfiniBand, RoCE |
+| 06 | Economics — TCO, $/token, power, capacity planning |
+| 07 | Roadmap reading — how to read NVIDIA whitepapers and analyst pieces |
+
+Plus worked case studies in [`reading-track/case-studies/`](reading-track/case-studies/): Blackwell Tensor Memory, Hopper, MI300X-vs-H100.
+
+When a chapter README mentions things like "WGMMA", "TMA", "FP8 E4M3", "NVL72", the reading-track files are the canonical place to fill in the depth.
+
+---
+
 ## Course-wide cross-references
 
 Some ideas show up in many chapters. Where this happens, the README points you back to the canonical chapter so you don't relearn:

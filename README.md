@@ -5,6 +5,7 @@ A hands-on course taking a competent PyTorch user to *LLM systems / performance 
 - **Start here:** [`COURSE.md`](COURSE.md) — full chapter map, learning loop, conventions.
 - **Source roadmap:** [`ROADMAP.md`](ROADMAP.md) — the unstructured notes the course was built from.
 - **Chapters:** [`chapters/`](chapters/) — 19 numbered folders, each self-contained.
+- **Reading track:** [`reading-track/`](reading-track/) — hardware-fluency material for reading SemiAnalysis / NVIDIA whitepapers / Hot Chips talks. Read alongside the chapters; not a prerequisite for them.
 - **Shared utilities:** [`shared/utils/`](shared/utils/) — timing, memory, NCCL bandwidth helpers reused across chapters.
 - **Your scratchpad:** [`tasks/lessons.md`](tasks/lessons.md) — write down every correction so the same mistake doesn't ship twice.
 
