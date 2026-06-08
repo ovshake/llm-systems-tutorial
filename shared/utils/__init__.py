@@ -12,7 +12,7 @@ from .memory import (
     estimate_param_memory,
     estimate_optimizer_memory,
 )
-from .mfu import a100_bf16_peak_tflops, estimate_mfu, transformer_flops_per_token
+from .mfu import h100_bf16_peak_tflops, estimate_mfu, transformer_flops_per_token
 from .model_presets import PRESETS, ModelPreset
 
 __all__ = [
@@ -24,7 +24,7 @@ __all__ = [
     "param_count",
     "estimate_param_memory",
     "estimate_optimizer_memory",
-    "a100_bf16_peak_tflops",
+    "h100_bf16_peak_tflops",
     "estimate_mfu",
     "transformer_flops_per_token",
     "PRESETS",

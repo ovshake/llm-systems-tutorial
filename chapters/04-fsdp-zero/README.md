@@ -1,6 +1,6 @@
 # Chapter 04 — FSDP & ZeRO (Memory Sharding)
 
-**Hardware target:** 4× A100-80GB. Many exercises will fit on 2 GPUs but you lose the comparison.
+**Hardware target:** 8× H100-80GB. Many exercises will fit on 2 GPUs but you lose the comparison.
 **Time budget:** 2–3 weeks.
 **Prerequisites:** Chapter 03 — DDP scaling works and you can read its profile.
 
@@ -8,14 +8,14 @@
 
 ## Why this chapter exists
 
-DDP keeps a full copy of the model + grads + optimizer on every GPU. That's wasted memory: in DDP the four ranks each store the exact same FP32 Adam states. Fixing this is "memory sharding" — split the model state across GPUs, then gather/scatter pieces as needed.
+DDP keeps a full copy of the model + grads + optimizer on every GPU. That's wasted memory: in DDP all eight ranks each store the exact same FP32 Adam states. Fixing this is "memory sharding" — split the model state across GPUs, then gather/scatter pieces as needed.
 
 There are two equivalent framings of the same idea:
 
 - **DeepSpeed ZeRO** (Rajbhandari et al.) — invented the concept. Three stages: optimizer-state sharding (ZeRO-1), gradient sharding (ZeRO-2), parameter sharding (ZeRO-3).
 - **PyTorch FSDP** (Fully Sharded Data Parallel) — PyTorch-native implementation, essentially equivalent to ZeRO-3 with finer-grained options.
 
-You can train a 7B model on your 4×A100-80GB node with FSDP. You cannot with DDP. That's the punchline.
+You can train a 7B model on your 8×H100-80GB node with FSDP. You cannot with DDP. That's the punchline.
 
 By the end of this chapter you will:
 
@@ -103,7 +103,7 @@ If `reduce_dtype=torch.float32`, you get FP32 accuracy on gradient reductions bu
 
 ### 5. `HYBRID_SHARD`
 
-`HYBRID_SHARD` shards across one dimension (intra-node), replicates across another (across nodes). On your 4-GPU single node it's identical to `FULL_SHARD`; on a multi-node cluster it's the default for the right reason — full shard across the slow inter-node link is brutal. We'll discuss in Chapter 07.
+`HYBRID_SHARD` shards across one dimension (intra-node), replicates across another (across nodes). On your 8-GPU single node it's identical to `FULL_SHARD`; on a multi-node cluster it's the default for the right reason — full shard across the slow inter-node link is brutal. We'll discuss in Chapter 07.
 
 ### 6. CPU offload
 
@@ -125,7 +125,7 @@ For research code, `FULL_STATE_DICT` is fine. For production-scale training, `SH
 
 ### Exercise 1 — Memory accounting prediction
 
-In [`memory_predict_sharded.py`](memory_predict_sharded.py), extend Chapter 02's predictor to model ZeRO stages and FSDP `FULL_SHARD`. For each preset at `(B=4, S=2048)` and `world_size=4`, print per-GPU memory under:
+In [`memory_predict_sharded.py`](memory_predict_sharded.py), extend Chapter 02's predictor to model ZeRO stages and FSDP `FULL_SHARD`. For each preset at `(B=4, S=2048)` and `world_size=8`, print per-GPU memory under:
 
 - DDP
 - ZeRO-1
@@ -143,10 +143,10 @@ In [`train_fsdp.py`](train_fsdp.py) (provided skeleton), wrap the model in FSDP 
 - `mixed_precision=MixedPrecision(param_dtype=bf16, reduce_dtype=bf16, buffer_dtype=bf16)`
 - `device_id=local_rank`
 
-Train the `small` preset on 4 GPUs. Confirm it converges to roughly the same loss as the DDP version.
+Train the `small` preset on 8 GPUs. Confirm it converges to roughly the same loss as the DDP version.
 
 ```bash
-torchrun --standalone --nproc_per_node=4 train_fsdp.py --config configs/small.yaml
+torchrun --standalone --nproc_per_node=8 train_fsdp.py --config configs/small.yaml
 ```
 
 **Deliverable:** Loss curve comparison (DDP vs FSDP) at the same global batch.
@@ -190,9 +190,9 @@ Run all three on the `1B` preset. Compare memory and tokens/sec to FSDP `FULL_SH
 
 Enable activation checkpointing under FSDP. The integration is fiddly — see `torch.distributed.algorithms._checkpoint.checkpoint_wrapper.apply_activation_checkpointing`. Wrap your `Block` instances *after* FSDP wrapping. Confirm it shrinks activation memory.
 
-Train the `3B` preset with FSDP + activation checkpointing on 4 GPUs. Without checkpointing it OOMs; with, it fits.
+Train the `3B` preset with FSDP on 8 GPUs. Push `(batch, seq)` up until it OOMs *without* activation checkpointing, then show it fits *with* it. Note FSDP shards params/grads/optimizer but **not** activations — so this OOM crossover is set by your per-GPU batch×seq, not by the GPU count (going from 4 to 8 GPUs frees optimizer-state memory, not activation memory).
 
-**Deliverable:** Table: (3B without ckpt → OOM), (3B with ckpt → fits).
+**Deliverable:** Table at your chosen `(batch, seq)`: (3B without ckpt → OOM), (3B with ckpt → fits).
 
 ### Exercise 7 — `SHARDED_STATE_DICT` round-trip
 

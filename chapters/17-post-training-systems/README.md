@@ -1,6 +1,6 @@
 # Chapter 17 — Post-Training Systems (SFT, DPO, RLHF / GRPO)
 
-**Hardware target:** 4× A100-80GB.
+**Hardware target:** 8× H100-80GB.
 **Time budget:** 4 weeks.
 **Prerequisites:** Chapter 04 (FSDP) and Chapter 12 (inference engine). You'll combine them.
 
@@ -144,7 +144,7 @@ In [`sft_packing.py`](sft_packing.py):
 3. Pack multiple examples into 4k-token sequences using `EOS` separator + position-id resets.
 4. Train your `small` or `medium` preset for a few hundred steps with cross-entropy on response tokens only (prompt tokens have `label = -100` and contribute zero loss).
 
-Run on 4 GPUs with FSDP from Chapter 04.
+Run on 8 GPUs with FSDP from Chapter 04.
 
 **Deliverable:** Loss curve. Generate a sample response after training — should follow the chat template.
 

@@ -1,6 +1,6 @@
 # Chapter 10 — Triton Kernels
 
-**Hardware target:** 1 A100 (Triton ≥ 3.0 supports Ampere; some kernels run faster on Hopper but the lessons transfer).
+**Hardware target:** 1 H100 (Triton ≥ 3.0 targets Hopper — `tl.dot` lowers to WGMMA and FP8 inputs hit native tensor cores; the lessons transfer to other GPUs).
 **Time budget:** 4 weeks.
 **Prerequisites:** Chapter 09 — you can read a trace and a roofline.
 
@@ -80,7 +80,7 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr, M, N, K, ...,
     tl.store(c_ptr + offs_m[:, None] * stride_cm + offs_n[None, :] * stride_cn, acc.to(c_ptr.dtype))
 ```
 
-The `tl.dot` call is what hits Tensor Cores. For BF16 inputs on A100, you'll get hundreds of TFLOPS.
+The `tl.dot` call is what hits Tensor Cores. For BF16 inputs on H100, you'll get many hundreds of TFLOPS — Triton lowers `tl.dot` to Hopper's warp-group MMA (WGMMA).
 
 ### 3. Autotuning
 
@@ -99,7 +99,7 @@ The most-common knobs:
 | Tall-skinny / weird shapes (e.g., decode-phase matvec) | Triton or CUTLASS |
 | Fused element-wise + matmul + element-wise | Triton |
 | Fused attention (causal + RoPE-on-K + dropout) | Triton or FlashAttention/CUTLASS |
-| Quantized matmul (INT8, INT4, FP8 on A100) | Triton (CUTLASS too, but Triton wins for new dtypes) |
+| Quantized matmul (INT8, INT4, native FP8) | Triton (CUTLASS too, but Triton wins for new dtypes) |
 | Softmax, layer norm, RMSNorm | Triton easily |
 
 For "ordinary" matmul, don't try to beat cuBLAS unless you have a very specific reason.
@@ -193,7 +193,7 @@ Benchmark against the eager 3-matmul implementation.
 
 [`int8_matmul.py`](int8_matmul.py): write a Triton kernel that does `int8_a @ int8_b → int32_acc → scale → bf16_out`. This is the shape of an INT8-weight-only quantized linear layer.
 
-Compare to a BF16 matmul. INT8 should be roughly 2× faster on A100.
+Compare to a BF16 matmul. INT8 should be roughly 2× faster on H100 (its INT8 peak is 2× its BF16 peak). Stretch further: redo the kernel in FP8 (`tl.float8e4nv` inputs, FP32 accumulate) — on Hopper `tl.dot` lowers this to native FP8 tensor cores, the same path production engines use for FP8 inference.
 
 **Deliverable:** Speedup. Note this is the same kernel you'd plug into vLLM's quantized inference paths.
 
@@ -211,7 +211,7 @@ You won't beat FlashAttention 2/3. The point is to see the algorithm in 200 line
 
 1. What does `tl.program_id` give you, and what's the analog in CUDA?
 2. Why do reductions inside a Triton kernel typically use FP32 even when inputs are BF16?
-3. What does `tl.dot` actually compile to on A100?
+3. What does `tl.dot` actually compile to on H100? (Hint: WGMMA — and how does that differ from the Ampere `mma`?)
 4. When would you pick a small BLOCK_K vs large BLOCK_K?
 5. What's `num_stages` and what's the trade-off when it grows?
 6. Why is online softmax the right way to do attention without materializing the score matrix?

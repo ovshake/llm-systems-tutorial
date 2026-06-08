@@ -1,7 +1,7 @@
 """Numerical equivalence tests for ColumnParallelLinear / RowParallelLinear.
 
 Run:
-    torchrun --standalone --nproc_per_node=4 -m pytest test_tp_linear.py -v
+    torchrun --standalone --nproc_per_node=8 -m pytest test_tp_linear.py -v
 
 These tests construct a reference `nn.Linear`, copy the relevant weight slice into each
 TP rank's shard, and assert the output matches.

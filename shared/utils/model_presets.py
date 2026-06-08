@@ -1,7 +1,7 @@
 """Standard transformer presets used across the course.
 
 Sizes are chosen so each one fits the corresponding hardware envelope with realistic
-batch size and sequence length on A100-80GB. They roughly match Pythia / Llama-family
+batch size and sequence length on H100-80GB. They roughly match Pythia / Llama-family
 shapes, scaled down where convenient for fast iteration.
 """
 
@@ -47,17 +47,17 @@ PRESETS: dict[str, ModelPreset] = {
     "medium": ModelPreset(
         name="medium", n_layers=24, hidden_size=1024, n_heads=16, n_kv_heads=16,
         intermediate_size=4096, context_length=2048,
-    ),  # ~350M params (~GPT-2 medium). Single A100 with grad checkpointing.
+    ),  # ~350M params (~GPT-2 medium). Single H100 with grad checkpointing.
     "1B": ModelPreset(
         name="1B", n_layers=24, hidden_size=2048, n_heads=16, n_kv_heads=16,
         intermediate_size=5632, context_length=2048,
-    ),  # ~1.1B params. Single A100-80GB with care; comfortable on 2 with DDP.
+    ),  # ~1.1B params. Single H100-80GB with care; comfortable on 2 with DDP.
     "3B": ModelPreset(
         name="3B", n_layers=32, hidden_size=2560, n_heads=20, n_kv_heads=20,
         intermediate_size=6912, context_length=2048,
-    ),  # ~2.8B params. Needs FSDP or TP on 4 GPUs.
+    ),  # ~2.8B params. Comfortable with FSDP or TP on the 8-GPU node.
     "7B": ModelPreset(
         name="7B", n_layers=32, hidden_size=4096, n_heads=32, n_kv_heads=8,
         intermediate_size=11008, context_length=2048,
-    ),  # ~7B params (~Llama-2 7B). FSDP or TP=4 required on 4xA100-80GB.
+    ),  # ~7B params (~Llama-2 7B). FSDP or TP (e.g. TP=4 or TP=8) on the 8xH100-80GB node.
 }

@@ -1,6 +1,6 @@
 # Chapter 11 — CUTLASS & CuTe DSL
 
-**Hardware target:** 1 GPU. A100 fine for the concepts; some recent CUTLASS templates target H100 features (WGMMA, TMA) you can't fully exercise on Ampere — those become "read, understand, defer."
+**Hardware target:** 1 H100. You can finally exercise the Hopper-specific CUTLASS templates (WGMMA, TMA, FP8) for real instead of "read, understand, defer" — these are the templates production kernels actually use.
 **Time budget:** 4–6 weeks. This is the hardest chapter.
 **Prerequisites:** Chapter 10 — Triton kernels written and benchmarked.
 
@@ -40,16 +40,16 @@ This is the hardest chapter. Budget time accordingly.
 CUTLASS organizes a GEMM as a *tiled* computation across three nested levels:
 
 ```
-Threadblock tile  (e.g., 128×128×32)
-  Warp tile       (e.g.,  64× 64×32)
-    Instruction   (e.g.,  16× 16×16 — one Tensor Core MMA)
+Threadblock tile    (e.g., 128×256×64)
+  Warp-group tile   (e.g.,  64×256×64 — on Hopper a *warp group* of 4 warps, not a single warp)
+    Instruction     (e.g.,  m64nNk16 WGMMA — Hopper warp-group MMA; the Ampere unit was a 16×16×16 warp MMA)
 ```
 
 You choose tile sizes; CUTLASS generates the kernel that loads the right slabs into shared memory, distributes them to warps, and feeds the MMA pipeline. The template parameters in a CUTLASS GEMM declaration are *exactly these tile choices* plus the data types.
 
-For an A100 BF16 matmul with `(M, N, K) = (8192, 8192, 8192)`:
-- Threadblock 128×128×64 with 4 warps is a common starting point.
-- Warp 64×64×64 → each warp does 4 MMA instructions of 16×16×16.
+For an H100 BF16 matmul with `(M, N, K) = (8192, 8192, 8192)`:
+- Threadblock 128×256×64 with two warp groups (8 warps) is a common Hopper starting point.
+- Each warp group issues `m64nNk16` WGMMAs, with TMA feeding the next K-tile asynchronously.
 
 ### 2. Pipeline stages
 
@@ -94,7 +94,7 @@ using Gemm = cutlass::gemm::device::GemmUniversal<
     bfloat16_t, RowMajor,
     float,
     arch::OpClassTensorOp,
-    arch::Sm80,
+    arch::Sm90,
     ThreadblockShape, WarpShape, InstructionShape,
     EpilogueOp,
     ...
@@ -124,15 +124,16 @@ def gemm_kernel(a, b, c, *, tile=(128, 128, 32), num_stages=3, ...):
 
 The mature production answer is *both*. Triton for the long tail of custom kernels; CUTLASS (or cuBLAS, which is built on it) for standard GEMMs and bleeding-edge architectural features.
 
-### 7. The reality on A100
+### 7. The reality on H100
 
-You are on Ampere. CUTLASS / CuTe templates targeting Hopper-specific features (WGMMA, TMA, FP8 tensor cores) won't fully apply. Read those sections so you know what's coming, but the kernels you write will use:
+You are on Hopper, so the Hopper-specific machinery is exactly what you should be learning — it's what production GEMM and attention kernels actually use. The kernels you write will use:
 
-- `cp.async` for async loads.
-- Ampere MMA instructions (16×16×16 BF16, etc.).
-- Shared memory layouts via CuTe.
+- **TMA** (Tensor Memory Accelerator) for async, multi-dimensional HBM↔SMEM tile loads, instead of Ampere's `cp.async`.
+- **WGMMA** — warp-group (128-thread) async MMAs (`m64nNk16` for BF16), instead of Ampere's 16×16×16 warp MMA.
+- **Warp specialization** — dedicated producer (TMA) and consumer (WGMMA) warp groups, coordinated by `mbarrier`. This is the structure behind FlashAttention 3.
+- **FP8 tensor cores** (E4M3/E5M2) for ~2× the BF16 throughput, with the `cutlass::gemm::collective` builder picking the FP8 kernel.
 
-Skip the H100-only flavors of warp specialization for now.
+Build for `sm_90a` — the `a` suffix unlocks the Hopper-only WGMMA/TMA instructions. The CuTe DSL exposes all of this from Python.
 
 ---
 
@@ -145,7 +146,7 @@ Clone `NVIDIA/cutlass` next to this repo. Build the examples:
 ```bash
 cd cutlass
 mkdir build && cd build
-cmake .. -DCUTLASS_NVCC_ARCHS=80   # Ampere
+cmake .. -DCUTLASS_NVCC_ARCHS=90a   # Hopper (the 'a' unlocks WGMMA/TMA)
 make -j install_unit_tests
 ```
 
@@ -205,7 +206,7 @@ Plot all three. Discuss where each wins.
 
 ### Exercise 6 — Read FlashAttention 3 source
 
-FlashAttention 3 is built on CUTLASS / CuTe with extensive warp specialization for Hopper. You can't run it on A100, but you *can* read the source. Open `Dao-AILab/flash-attention` → `hopper/`. Read for an hour. Identify:
+FlashAttention 3 is built on CUTLASS / CuTe with extensive warp specialization for Hopper. On your H100 you can both *build/run* it and read the source. Build the `hopper/` target of `Dao-AILab/flash-attention`, then read for an hour. Identify:
 
 - The producer/consumer split.
 - Where the online softmax lives.

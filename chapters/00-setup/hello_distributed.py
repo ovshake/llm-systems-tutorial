@@ -1,6 +1,6 @@
 """Distributed hello world. Run with:
 
-    torchrun --standalone --nproc_per_node=4 hello_distributed.py
+    torchrun --standalone --nproc_per_node=8 hello_distributed.py
 
 Each rank prints its identity, then we exchange a single all_reduce to confirm NCCL works.
 """

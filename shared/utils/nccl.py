@@ -10,7 +10,7 @@ NCCL bandwidth is reported in two flavors:
   reduce-scatter: busbw = algbw * (N-1) / N.
 
 Both numbers are useful; busbw is what you compare against the link's hardware spec
-(NVLink ~ 300 GB/s on A100, PCIe ~ 25 GB/s).
+(NVLink ~ 450 GB/s per direction on H100, PCIe Gen5 ~ 50 GB/s).
 """
 
 from __future__ import annotations

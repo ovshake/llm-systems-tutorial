@@ -1,7 +1,7 @@
 """Production-shaped DDP trainer with bucketed gradient overlap.
 
 Launch:
-    torchrun --standalone --nproc_per_node=4 train_ddp.py --config configs/small.yaml
+    torchrun --standalone --nproc_per_node=8 train_ddp.py --config configs/small.yaml
 
 This is the recommended pattern for any real DDP training. Diff against ddp_from_scratch.py
 to see exactly what `DistributedDataParallel` is buying you — bucketing, overlap, an

@@ -1,6 +1,6 @@
 # Chapter 06 — Pipeline Parallelism
 
-**Hardware target:** 2–4 GPUs (you'll feel the bubbles best at 4).
+**Hardware target:** 2–8 GPUs (you'll feel the bubbles best at 8 — more stages, bigger bubble).
 **Time budget:** 2–3 weeks.
 **Prerequisites:** Chapter 05 — TP works.
 
@@ -96,7 +96,7 @@ Standard layout for a 4×4×4 = 64-GPU run: TP=4 (intra-node), PP=4 (across node
 
 ## Hands-on
 
-### Exercise 1 — Naïve GPipe on 4 GPUs
+### Exercise 1 — Naïve GPipe on 8 GPUs
 
 In [`gpipe.py`](gpipe.py) (skeleton), implement a synchronous GPipe scheduler:
 
@@ -147,11 +147,11 @@ Profile each. The one matching your actual compute imbalance should be ~5–10% 
 
 ### Exercise 5 — Compose with DP
 
-Run `(PP=2, DP=2)` on 4 GPUs. Then `(PP=4, DP=1)`. Then `(PP=1, DP=4)`. For each, hold global batch constant and compare tokens/sec.
+Run `(PP=2, DP=4)` on 8 GPUs. Then `(PP=4, DP=2)`. Then `(PP=8, DP=1)`. Then `(PP=1, DP=8)`. For each, hold global batch constant and compare tokens/sec.
 
 Spoiler: on a single node with NVLink, DP almost always beats PP for a small model. PP only wins when DP/FSDP runs out of memory.
 
-**Deliverable:** Three-row table; conclusion in 1 paragraph.
+**Deliverable:** Four-row table; conclusion in 1 paragraph.
 
 ### Exercise 6 — Interleaved schedule (stretch)
 

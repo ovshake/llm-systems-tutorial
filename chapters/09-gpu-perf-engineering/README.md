@@ -12,7 +12,7 @@ So far you've used the PyTorch profiler as a black box: "look at the trace, find
 
 By the end you will:
 
-1. Be able to draw the A100 memory hierarchy from memory and label the bandwidths.
+1. Be able to draw the H100 memory hierarchy from memory and label the bandwidths.
 2. Use Nsight Systems for timeline analysis and Nsight Compute for kernel-level analysis.
 3. Read a roofline plot and decide if a kernel is compute-bound or bandwidth-bound.
 4. Know when to fuse kernels and when fusion doesn't help.
@@ -24,7 +24,7 @@ This is the prerequisite for Chapters 10 (Triton kernels) and 11 (CUTLASS/CuTe).
 
 ## Read first
 
-- **NVIDIA A100 architecture whitepaper** (and Hopper if you want to compare to H100).
+- **NVIDIA H100 (Hopper) architecture whitepaper** (and the Ampere/A100 whitepaper if you want to see what changed generation-to-generation).
 - **Programming Massively Parallel Processors** (Hwu, Kirk, Hajj) — Chapters 1–6 are the canonical CUDA mental model.
 - **NVIDIA CUDA C++ Programming Guide** — at least the memory hierarchy and execution model sections.
 - **Nsight Systems user guide** — focus on the GUI walkthrough.
@@ -45,16 +45,16 @@ Grid          ──▶ a collection of thread blocks (the whole launch)
       Thread  ──▶ the basic unit; has its own registers
 ```
 
-A kernel launch specifies grid dimensions and block dimensions. The hardware scheduler assigns blocks to Streaming Multiprocessors (SMs). A100 has 108 SMs; H100 has 132. Each SM can hold many blocks concurrently (subject to register / shared-memory / warp budgets).
+A kernel launch specifies grid dimensions and block dimensions. The hardware scheduler assigns blocks to Streaming Multiprocessors (SMs). H100 has 132 SMs (A100 had 108). Each SM can hold many blocks concurrently (subject to register / shared-memory / warp budgets).
 
-### 2. The memory hierarchy (A100 numbers)
+### 2. The memory hierarchy (H100 numbers)
 
 ```
-Registers          : ~256 KB per SM, free latency  (per-thread; 32 bits each, ~65k per SM)
-Shared memory / L1 : ~192 KB per SM, ~20 cycles
-L2 cache           :  40 MB (whole GPU), ~200 cycles
-HBM2e              : 80 GB, ~400 cycles, 1.55–2.0 TB/s
-Host RAM (via PCIe): up to your system, ~25 GB/s
+Registers              : ~256 KB per SM, free latency  (per-thread; 32 bits each, ~65k per SM)
+Shared memory / L1     : ~228 KB per SM, ~20 cycles
+L2 cache               :  50 MB (whole GPU), ~200 cycles
+HBM3                   : 80 GB, ~400 cycles, 3.35 TB/s
+Host RAM (via PCIe Gen5): up to your system, ~50 GB/s
 ```
 
 Implications:
@@ -68,12 +68,12 @@ Implications:
 achievable_flops_per_second = min(peak_flops, peak_bandwidth * arithmetic_intensity)
 ```
 
-For A100 BF16: peak 312 TFLOPS, peak HBM 1.55 TB/s. Crossover intensity = 312e12 / 1.55e12 ≈ 200 FLOPs/byte.
+For H100 BF16: peak 989 TFLOPS, peak HBM 3.35 TB/s. Crossover intensity = 989e12 / 3.35e12 ≈ 295 FLOPs/byte. (Note the crossover *rose* from ~200 on A100: H100's compute grew ~3× while its bandwidth grew only ~1.6×, so more kernels are bandwidth-bound on Hopper than were on Ampere.)
 
-A kernel doing `f` FLOPs and reading/writing `b` bytes has intensity `f / b`. Compare against 200:
+A kernel doing `f` FLOPs and reading/writing `b` bytes has intensity `f / b`. Compare against 295:
 
-- **f/b > 200**: compute-bound. Speed up by using more cores efficiently — tiling, Tensor Cores, fewer wasted threads.
-- **f/b < 200**: bandwidth-bound. Speed up by *moving less data* — fusion, in-place updates, lower precision.
+- **f/b > 295**: compute-bound. Speed up by using more cores efficiently — tiling, Tensor Cores, fewer wasted threads.
+- **f/b < 295**: bandwidth-bound. Speed up by *moving less data* — fusion, in-place updates, lower precision.
 
 You'll re-derive this in Exercise 3.
 
@@ -178,7 +178,7 @@ ncu --set full -o gemm_profile python gemm_one.py
 - Memory Throughput.
 - Tensor pipe utilization.
 
-For a `(4096, 4096) @ (4096, 4096)` BF16 matmul on A100, you should see ~150–200+ TFLOPS achieved (≈ 50–65% of peak).
+For a `(4096, 4096) @ (4096, 4096)` BF16 matmul on H100, you should see ~500–700 TFLOPS achieved (≈ 50–70% of peak). A 4096³ matmul is on the small side for saturating an H100, so don't be surprised if you need larger shapes (8192³) to get close to peak.
 
 **Deliverable:** Screenshot of the SOL section; numbers in `NOTES.md`.
 
@@ -228,7 +228,7 @@ Take a simple op chain (e.g., `(x + a) * b → relu`). Time it eager, then `torc
 
 ## Self-check
 
-1. A100 peak BF16 FLOPS? Peak HBM bandwidth? Roofline crossover?
+1. H100 peak BF16 FLOPS? Peak HBM bandwidth? Roofline crossover?
 2. Why does coalesced memory access matter, and what causes it to break?
 3. What does Nsight Compute's "Speed Of Light" tell you that "kernel time" doesn't?
 4. When does kernel fusion help, and when is it irrelevant?

@@ -1,6 +1,6 @@
 """FSDP trainer. Launch with:
 
-    torchrun --standalone --nproc_per_node=4 train_fsdp.py --config configs/1B.yaml
+    torchrun --standalone --nproc_per_node=8 train_fsdp.py --config configs/1B.yaml
 
 Demonstrates: FULL_SHARD, ModuleWrapPolicy({Block}), BF16 MixedPrecision, and the
 basic checkpoint pattern.

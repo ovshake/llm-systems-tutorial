@@ -54,7 +54,7 @@ Most engineers who "can read hardware articles fluently" are doing this fast and
 
 ## Why this track exists separately from `chapters/`
 
-`chapters/` is about *doing*. Most learners benefit from doing-first because the abstractions only stick once you've debugged a bug they explain. But there is a category of knowledge — microarchitectural evolution, modern instruction families, networking topology — that you mostly learn by *reading*, not by *implementing*. (You won't be implementing a Blackwell tensor core simulator on your 4-GPU node.)
+`chapters/` is about *doing*. Most learners benefit from doing-first because the abstractions only stick once you've debugged a bug they explain. But there is a category of knowledge — microarchitectural evolution, modern instruction families, networking topology — that you mostly learn by *reading*, not by *implementing*. (You won't be implementing a Blackwell tensor core simulator on your 8-GPU node.)
 
 This track is the reading-shaped part of the curriculum.
 

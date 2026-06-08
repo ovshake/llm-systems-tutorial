@@ -1,6 +1,6 @@
 # Chapter 08 — MoE Training
 
-**Hardware target:** 4× A100-80GB.
+**Hardware target:** 8× H100-80GB.
 **Time budget:** 3–4 weeks.
 **Prerequisites:** Chapter 07 — you have 3D parallelism intuition.
 
@@ -77,7 +77,7 @@ where `f_e` is the fraction of tokens routed to expert `e` and `P_e` is the aver
 
 ### 3. Expert parallelism (EP)
 
-Each expert is *placed* on a specific GPU (or shared across a TP slice of GPUs). For 8 experts on 4 GPUs (EP=4), each GPU holds 2 experts.
+Each expert is *placed* on a specific GPU (or shared across a TP slice of GPUs). For 8 experts on 8 GPUs (EP=8), each GPU holds 1 expert.
 
 The routing dance:
 
@@ -147,7 +147,7 @@ Replace the SwiGLU MLP in your Chapter 01 model with the MoE layer. Train on Tin
 
 ### Exercise 3 — Expert parallelism with `all_to_all`
 
-In [`moe_ep.py`](moe_ep.py), spread the experts across GPUs. With 4 experts on 4 GPUs (EP=4), each GPU holds 1 expert.
+In [`moe_ep.py`](moe_ep.py), spread the experts across GPUs. With 8 experts on 8 GPUs (EP=8), each GPU holds 1 expert.
 
 The forward becomes:
 1. Each rank computes router output for its local tokens.
@@ -159,7 +159,7 @@ The forward becomes:
 
 Launch:
 ```bash
-torchrun --standalone --nproc_per_node=4 train_moe_ep.py --config configs/small_moe.yaml
+torchrun --standalone --nproc_per_node=8 train_moe_ep.py --config configs/small_moe.yaml
 ```
 
 **Deliverable:** Loss curve matches single-GPU version (within stochastic noise).
@@ -182,7 +182,7 @@ Profile a step. Compare:
 - All-to-all time (sum of both directions).
 - Expert MLP compute time.
 
-For a small MoE on 4 NVLink-connected GPUs, all-to-all is typically 15–30% of step time. Try shrinking the model — the fraction grows; expert compute drops faster than all-to-all.
+For a small MoE on your 8 NVLink-connected GPUs (EP=8), all-to-all is typically 20–35% of step time. Try shrinking the model — the fraction grows; expert compute drops faster than all-to-all.
 
 **Deliverable:** Stacked bar chart in `NOTES.md` showing the breakdown for 3 model sizes.
 
@@ -228,7 +228,7 @@ You don't have to fully run it — implementing the wiring change and confirming
 
 ## Deliverables before moving on
 
-- Working toy MoE (single GPU and EP=4).
+- Working toy MoE (single GPU and EP=8).
 - Token-imbalance plot.
 - All-to-all-dominated profile.
 - Capacity factor / drop rate study.

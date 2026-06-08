@@ -1,6 +1,6 @@
 # Chapter 15 — vLLM Deep Dive & Contributions
 
-**Hardware target:** 4× A100-80GB for the multi-GPU exercises; 1 GPU is enough for code reading.
+**Hardware target:** 8× H100-80GB for the multi-GPU exercises; 1 GPU is enough for code reading.
 **Time budget:** 4–6 weeks.
 **Prerequisites:** Chapter 14 — your mini-engine has the major optimizations.
 
@@ -117,8 +117,8 @@ The scheduler is the single most consequential file. Read it 3 times.
 
 `vllm/attention/backends/`. Each backend exposes a uniform interface: given Q, KV pool, block tables, sequence lengths, scale, return attention output. Backends:
 
-- **FlashAttention2** — the workhorse on Ampere.
-- **FlashAttention3** — for Hopper.
+- **FlashAttention3** — the Hopper backend you'll actually run on your H100.
+- **FlashAttention2** — the portable default; the fallback path on Hopper and the workhorse on older GPUs.
 - **XFormers** — fall-back.
 - **PagedAttentionV1/V2** — custom CUDA kernels in `csrc/attention/`.
 
@@ -183,7 +183,7 @@ Compare TTFT / ITL / throughput / p99 to your numbers from Chapter 14.
 
 ### Exercise 4 — Reproduce an open performance issue
 
-Go to vLLM's issues. Filter by `performance`. Pick one you can plausibly reproduce on 4×A100-80GB. Run the scenario, confirm the regression or bottleneck.
+Go to vLLM's issues. Filter by `performance`. Pick one you can plausibly reproduce on 8×H100-80GB. Run the scenario, confirm the regression or bottleneck.
 
 **Deliverable:** Issue link + your reproduction steps + numbers, in `NOTES.md`.
 
@@ -241,7 +241,7 @@ Pick a documented but disabled-by-default optimization (e.g., a new attention ba
 
 ## Deliverables before moving on
 
-- vLLM serving works on 4×A100.
+- vLLM serving works on 8×H100.
 - Source-tour notes in `NOTES.md`.
 - Two benchmark workloads run and compared to Chapter 14.
 - Reproduced an open issue.

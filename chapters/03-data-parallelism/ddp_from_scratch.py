@@ -1,7 +1,7 @@
 """Hand-rolled DDP. No overlap — gradients are reduced serially after backward.
 
 Launch:
-    torchrun --standalone --nproc_per_node=4 ddp_from_scratch.py --config configs/small.yaml
+    torchrun --standalone --nproc_per_node=8 ddp_from_scratch.py --config configs/small.yaml
 
 The point of this script is to make the gradient all-reduce visible. The "real" DDP
 trainer is train_ddp.py.

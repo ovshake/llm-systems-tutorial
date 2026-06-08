@@ -1,6 +1,6 @@
 # Chapter 14 — Advanced Inference
 
-**Hardware target:** 4× A100-80GB (for tensor-parallel inference and bigger models).
+**Hardware target:** 8× H100-80GB (for tensor-parallel inference and bigger models).
 **Time budget:** 4 weeks.
 **Prerequisites:** Chapter 13 — your engine has paged KV and prefix caching.
 
@@ -38,7 +38,7 @@ By the end you will:
 - **GPTQ** (Frantar et al., 2022) — INT4 weight quantization.
 - **AWQ** (Lin et al., 2023) — activation-aware INT4.
 - **SmoothQuant** (Xiao et al., 2022) — INT8 activations.
-- **FP8 GEMM** — H100 reference; on A100 you can only do INT8.
+- **FP8 GEMM** — native on your H100 via `torch._scaled_mm` (and the FP8 paths in vLLM/CUTLASS); this is the production default for FP8 inference, not just a reference.
 - **"Punica: Multi-Tenant LoRA Serving"** (Chen et al., 2023).
 - **vLLM docs on speculative decoding, quantization, multi-LoRA.**
 
@@ -67,7 +67,7 @@ Variants:
 Same column/row parallel pattern as training (Chapter 05), but with one major difference: **decode is bandwidth-bound, not compute-bound**. The TP all-reduce in row-parallel costs you a meaningful fraction of the step, and there's less compute to overlap it with.
 
 Optimal TP degree for inference is often *smaller* than for training:
-- 7B model: TP=1 fits easily on A100-80GB. TP=2 sometimes helps if it doubles available memory bandwidth.
+- 7B model: TP=1 fits easily on H100-80GB. TP=2 sometimes helps if it doubles available memory bandwidth.
 - 30B model: TP=2 or TP=4.
 - 70B model: TP=4 or TP=8.
 
@@ -98,9 +98,9 @@ Memory: half. Compute: same (you dequant in registers; the GEMM is still BF16). 
 ### 4. Disaggregated prefill/decode
 
 Prefill is compute-bound; decode is bandwidth-bound. Different hardware is optimal:
-- A100 is fine for both.
-- For prefill at scale: high-FLOPs GPUs (H100, Blackwell).
-- For decode: high-bandwidth, lots of memory.
+- H100 (what you have) is fine for both.
+- For prefill at scale: the highest-FLOPs GPUs (H100/H200, Blackwell).
+- For decode: high-bandwidth, lots of memory (e.g. H200's 141 GB HBM3e).
 
 Disagg means: send prefill to one pool, then transfer the KV cache to a decode pool, continue. Pros: independent scaling per phase, better utilization. Cons: KV transfer between pools (which is just bytes over RDMA) adds latency, complexity is huge.
 
@@ -212,7 +212,7 @@ You implemented chunked prefill in Chapter 13. Now sweep the chunk size (256, 51
 
 ### Exercise 7 — KV cache quantization
 
-Quantize your KV cache to FP8 (if you can — on A100, simulate with INT8). Measure quality and throughput.
+Quantize your KV cache to FP8 — native on your H100 (E5M2 gives more exponent headroom; E4M3 more precision), no INT8 simulation needed. Measure quality and throughput.
 
 **Deliverable:** Two-row table.
 

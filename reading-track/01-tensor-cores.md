@@ -50,7 +50,7 @@ T4 was the workhorse inference GPU for years; INT8 quantization on Turing was wh
 - **2:4 structured sparsity:** if your weight matrix has at most 2 nonzeros per group of 4, hardware does the matmul in half the time. Inference quantization technique.
 - **`cp.async`:** the first async memory copy instruction. Sets up the multi-stage pipeline.
 
-This is what your 4×A100 box is. Most of the Triton kernels you'll write target this generation.
+Ampere is the previous generation, but everything it added — BF16, TF32, `cp.async`, 2:4 sparsity — carries forward into Hopper, so it's worth understanding even though it's no longer your target.
 
 ---
 
@@ -92,6 +92,8 @@ For training: FP8 weights/activations + FP32 master + per-tensor scale.
 ### 4. CTA clusters
 
 (Covered in `00-hardware-fluency.md`.) New scheduling level above the block: 2–16 blocks scheduled on adjacent SMs in the same GPC, with shared distributed memory and a cluster barrier.
+
+This is what your 8×H100 box is. Most of the Triton and CUTLASS kernels you'll write target this generation — WGMMA, TMA, and FP8 are the tools you actually have.
 
 ---
 

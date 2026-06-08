@@ -75,17 +75,24 @@ def main() -> int:
         print(f"BF16 matmul           : FAILED: {e}")
         return 1
 
-    # FP8 sanity (Hopper+ only — A100 does not have FP8, expect failure on A100)
+    # FP8 sanity. Hopper (H100, sm_90) has native FP8 tensor cores, so on this course's
+    # target hardware FP8 should be present AND usable. A failure here on an H100 means a
+    # stale PyTorch / CUDA build, not an expected hardware limitation. (The FP8 GEMM entry
+    # point you'll use in Chapters 11/14 is torch._scaled_mm.)
     fp8_dtype = getattr(torch, "float8_e4m3fn", None)
-    if fp8_dtype is not None:
+    major = torch.cuda.get_device_capability()[0]
+    if fp8_dtype is None:
+        print("FP8 dtype            : not in this PyTorch (upgrade to a Hopper-aware build)")
+    else:
         try:
             x = torch.zeros(8, dtype=fp8_dtype, device="cuda")
-            _ = x + 0  # operations are limited
-            print("FP8 dtype            : present (does not imply hardware support)")
-        except Exception:
-            print("FP8 dtype            : present but unusable on this device (expected on A100)")
-    else:
-        print("FP8 dtype            : not in this PyTorch")
+            _ = x.float().sum().item()
+            if major >= 9:
+                print("FP8 dtype            : present and usable (Hopper native FP8) ok")
+            else:
+                print(f"FP8 dtype            : present, but sm_{major}0 has no native FP8 tensor cores")
+        except Exception as e:  # noqa: BLE001
+            print(f"FP8 dtype            : present but cast FAILED: {e}")
 
     print()
     print("Relevant env vars:")

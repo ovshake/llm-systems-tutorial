@@ -1,8 +1,8 @@
 """Measure peer-to-peer copy bandwidth between every GPU pair.
 
 This is a *unidirectional* P2P copy benchmark — for each (src, dst) pair we copy a 1 GiB
-tensor from src to dst and report GB/s. NVLink should show 250–500 GB/s depending on the
-GPU and NVSwitch topology; PCIe Gen4 shows 15–25 GB/s.
+tensor from src to dst and report GB/s. On H100, NVLink should show 350–700 GB/s depending
+on the GPU and NVSwitch topology; PCIe Gen5 shows 30–55 GB/s.
 
 If you see a row/column with surprisingly low bandwidth, that pair is on PCIe rather than
 NVLink. Plan your tensor-parallel and pipeline-parallel placement to avoid it.

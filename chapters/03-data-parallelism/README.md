@@ -1,6 +1,6 @@
 # Chapter 03 — Data Parallelism (DDP)
 
-**Hardware target:** 2–4 GPUs. Full benefit at 4.
+**Hardware target:** 2–8 GPUs. Full benefit at 8.
 **Time budget:** 2 weeks.
 **Prerequisites:** Chapter 02 — you can predict and measure memory and MFU.
 
@@ -14,7 +14,7 @@ By the end of this chapter you will:
 
 1. Have implemented a "DDP-from-scratch" trainer (hand-rolled all-reduce on gradients) before using PyTorch's `DistributedDataParallel`.
 2. Understand bucketization and why DDP is overlap-friendly.
-3. Be able to measure scaling efficiency on your 4-GPU node and explain *why* it's not 100%.
+3. Be able to measure scaling efficiency on your 8-GPU node and explain *why* it's not 100%.
 4. Know the difference between micro-batch, global batch, and gradient accumulation, and be able to debug a "loss is different on different world sizes" bug.
 
 ---
@@ -77,16 +77,16 @@ Two knobs:
 
 ### 5. Why scaling isn't 100%
 
-You'll *not* see 4× tokens/sec on 4 GPUs. Where the loss goes:
+You'll *not* see 8× tokens/sec on 8 GPUs. Where the loss goes:
 
 | Cause | Symptom | Fix |
 |---|---|---|
-| All-reduce cost | dt(N=4) > dt(N=1) | bigger model (more compute per all-reduce byte), bigger micro-batch |
+| All-reduce cost | dt(N=8) > dt(N=1) | bigger model (more compute per all-reduce byte), bigger micro-batch |
 | Data loading bottleneck | low GPU utilization, dataloader pegs CPU | preload, prefetch, persistent workers, IterableDataset |
 | Stragglers | one rank slower than others; barrier waits | check thermal throttling, weird PCIe links, system noise |
 | Synchronizing on `loss.item()` | weird CPU↔GPU stalls | move logging off the hot path |
 
-A healthy 4-GPU DDP run on a single node should get >85% scaling efficiency for a ~125M model with batch 32, seq 1024.
+A healthy 8-GPU DDP run on a single node should get >80% scaling efficiency for a ~125M model with batch 32, seq 1024 (a small model has less compute to hide the all-reduce behind, so 8-way efficiency runs a bit below the 4-way number — push the model or micro-batch up and it recovers).
 
 ### 6. The "DDP from scratch" mental model
 
@@ -120,10 +120,10 @@ In [`ddp_from_scratch.py`](ddp_from_scratch.py) (provided as a skeleton), wire u
 
 Run:
 ```bash
-torchrun --standalone --nproc_per_node=4 ddp_from_scratch.py --config configs/small.yaml
+torchrun --standalone --nproc_per_node=8 ddp_from_scratch.py --config configs/small.yaml
 ```
 
-**Deliverable:** Side-by-side loss curves at world_size=1 and world_size=4 with `global_batch` held constant.
+**Deliverable:** Side-by-side loss curves at world_size=1 and world_size=8 with `global_batch` held constant.
 
 ### Exercise 2 — Replace with `DistributedDataParallel`
 

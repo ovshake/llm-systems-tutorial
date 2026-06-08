@@ -1,6 +1,6 @@
 # Chapter 05 — Tensor Parallelism
 
-**Hardware target:** 2–4 GPUs with NVLink. TP across PCIe is painful and not recommended.
+**Hardware target:** 2–8 GPUs with NVLink. TP across PCIe is painful and not recommended.
 **Time budget:** 3 weeks.
 **Prerequisites:** Chapter 04 — FSDP works.
 
@@ -16,7 +16,7 @@ TP is also the most numerically subtle parallelism scheme in the toolkit:
 - TP-comm happens *inside* every transformer block, not once per step like DDP. That's why TP wants NVLink and almost never crosses node boundaries.
 - TP composes with DP and PP — Chapter 07 combines all three.
 
-By the end you will have implemented column- and row-parallel linear layers, sharded a transformer block (attention + MLP) across 4 GPUs, added sequence parallelism, used vocab-parallel cross-entropy, and benchmarked the trade-offs.
+By the end you will have implemented column- and row-parallel linear layers, sharded a transformer block (attention + MLP) across up to 8 GPUs, added sequence parallelism, used vocab-parallel cross-entropy, and benchmarked the trade-offs.
 
 ---
 
@@ -113,8 +113,8 @@ This is why TP is almost always *intra-node*. Cross-node TP is technically possi
 
 Practical TP degrees:
 
-- **TP=2 or TP=4** on a 4-GPU node — standard.
-- **TP=8** on a DGX-8 — standard for 30B+ models.
+- **TP=2 or TP=4** within an 8-GPU node — common for 7B–13B.
+- **TP=8** on a DGX-8 (your box) — standard for 30B+ models; NVSwitch makes full-node TP realistic.
 - **TP=16+** — needs careful interconnect. Usually combined with PP across the slow links.
 
 If your TP degree doesn't divide cleanly into your model dimensions, expect padding or quality regressions.
@@ -139,7 +139,7 @@ class RowParallelLinear(nn.Module):
 
 Tests in [`test_tp_linear.py`](test_tp_linear.py) verify numerical equivalence to a single-GPU `nn.Linear`. Run:
 ```bash
-torchrun --standalone --nproc_per_node=4 -m pytest test_tp_linear.py -v
+torchrun --standalone --nproc_per_node=8 -m pytest test_tp_linear.py -v
 ```
 
 **Deliverable:** Tests pass at tp_size ∈ {1, 2, 4}.
@@ -164,9 +164,9 @@ Replace `SwiGLUMLP` with a sharded version. `w1` and `w2` (the two up-projection
 
 ### Exercise 4 — Train a TP transformer
 
-In [`train_tp.py`](train_tp.py), wire your sharded block into the model and train the `small` preset on 4 GPUs with tp=4.
+In [`train_tp.py`](train_tp.py), wire your sharded block into the model and train the `small` preset with tp=4. (Its 12 attention heads don't divide evenly by 8, so tp=4 is the natural full-shard degree here — head-count divisibility is a real TP constraint. tp=8 is for the bigger, more-heads models in Chapter 07.)
 
-Compare to (a) single GPU and (b) DDP at world=4 on the same global batch. Loss curves should overlap. Tokens/sec — discuss in `NOTES.md`. (TP is rarely faster than DDP for small models; the win is fitting bigger ones.)
+Compare to (a) single GPU and (b) DDP at world=8 on the same global batch. Loss curves should overlap. Tokens/sec — discuss in `NOTES.md`. (TP is rarely faster than DDP for small models; the win is fitting bigger ones.)
 
 **Deliverable:** Three loss curves overlayed.
 

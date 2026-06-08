@@ -4,7 +4,7 @@ This is the build plan for the hands-on course derived from `ROADMAP.md`.
 
 ## Target learner
 
-Strong PyTorch user with a 4×A100-80GB node who wants to ship code in vLLM / SGLang / Megatron-style projects within ~12 months. Course covers:
+Strong PyTorch user with an 8×H100-80GB node who wants to ship code in vLLM / SGLang / Megatron-style projects within ~12 months. Course covers:
 distributed training, GPU perf engineering, kernels (Triton/CUTLASS/CuTe), inference engines, and post-training systems.
 
 ## Build checklist

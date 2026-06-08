@@ -8,7 +8,7 @@
 
 ## Why this chapter exists
 
-You're not going to train a 100B model on your 4-GPU box. But the *plans* you'd make if you had the GPUs are exactly what you'd be asked to do in a serious interview, in a design doc, or in the first month at a pretraining shop. The capstone is where you write those plans down — properly, with math you can defend, citing the lessons from earlier chapters.
+You're not going to train a 100B model on your 8-GPU box. But the *plans* you'd make if you had the GPUs are exactly what you'd be asked to do in a serious interview, in a design doc, or in the first month at a pretraining shop. The capstone is where you write those plans down — properly, with math you can defend, citing the lessons from earlier chapters.
 
 This is also where the portfolio takes its final shape. Until now you have notes, scripts, and benchmark results scattered across chapter folders. The capstone collects them into a coherent narrative.
 

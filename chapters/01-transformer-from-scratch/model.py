@@ -112,7 +112,7 @@ class Attention(nn.Module):
         #   3. Apply RoPE to q and k (not v).
         #   4. If GQA (n_kv_heads < n_heads), repeat k and v along the head dimension
         #      so they broadcast against q.
-        #   5. Use F.scaled_dot_product_attention with is_causal=True. On A100 this
+        #   5. Use F.scaled_dot_product_attention with is_causal=True. On H100 this
         #      dispatches to FlashAttention; on older GPUs it falls back to the math kernel.
         #   6. Reshape back to (B, T, C), apply the output projection.
         raise NotImplementedError("Implement Attention.forward (Exercise 1.3)")

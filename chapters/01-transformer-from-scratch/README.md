@@ -1,6 +1,6 @@
 # Chapter 01 — Transformer from Scratch (Single GPU)
 
-**Hardware target:** 1 GPU (any A100; A10 / 3090 / 4090 also fine for the "tiny" preset).
+**Hardware target:** 1 GPU (any H100; A10 / 3090 / 4090 also fine for the "tiny" preset).
 **Time budget:** 2 weeks.
 **Prerequisites:** Chapter 00 passed all checks.
 
@@ -118,7 +118,7 @@ Stub model is in [`model.py`](model.py). It compiles and produces output, but th
 
 1. `apply_rope(x, freqs)` — apply rotary embeddings to Q and K.
 2. `RMSNorm.forward` — root-mean-square normalization.
-3. `Attention.forward` — multi-head self-attention with causal mask. Use `F.scaled_dot_product_attention` (which dispatches to FlashAttention on A100).
+3. `Attention.forward` — multi-head self-attention with causal mask. Use `F.scaled_dot_product_attention` (which dispatches to FlashAttention on H100).
 4. `SwiGLUMLP.forward` — the gated MLP.
 5. `GPT.forward` — assemble the blocks, return logits.
 
@@ -136,10 +136,10 @@ python train.py --config configs/tiny.yaml
 This trains the `tiny` preset (10M params) for ~1000 steps in BF16. You should see:
 
 - Loss falling from ~10.8 (random) to ~3.5 within 500 steps.
-- ~30–40k tokens/sec on an A100.
+- ~50–70k tokens/sec on an H100.
 - Peak memory under 4 GiB.
 
-Inspect what the training script prints: step time, tokens/sec, peak alloc, MFU. The MFU should be ~20–35% on a single A100 for the tiny preset — small models don't saturate the GPU.
+Inspect what the training script prints: step time, tokens/sec, peak alloc, MFU. The MFU should be ~10–20% on a single H100 for the tiny preset — small models don't saturate the GPU, and a 3× faster GPU is *even harder* to saturate with a toy model (throughput rises modestly while the peak you divide by triples vs. the old A100 target).
 
 **Deliverable:** Training log committed as `runs/tiny/log.txt`. Loss curve plot as `runs/tiny/loss.png`.
 

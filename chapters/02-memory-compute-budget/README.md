@@ -1,6 +1,6 @@
 # Chapter 02 — Memory & Compute Budgeting
 
-**Hardware target:** 1 GPU (the more memory the better — A100-80GB makes the explorations cleaner).
+**Hardware target:** 1 GPU (the more memory the better — H100-80GB makes the explorations cleaner).
 **Time budget:** 1–2 weeks.
 **Prerequisites:** Chapter 01 model trains.
 
@@ -30,7 +30,7 @@ By the end you should be able to fill in this table from a napkin for any dense 
 - **Reducing Activation Recomputation in Large Transformer Models** (Korthikanti et al., 2022) — the canonical activation memory paper. Memorize the activation formula.
 - **FlashAttention** (Dao et al., 2022) — the *memory* contribution matters as much as the speed. See Figure 1: vanilla attention keeps an `O(S²)` mask in HBM, FlashAttention does not.
 - **FlashAttention-2** and **FlashAttention-3** — successive engineering improvements; the high-level story is the same.
-- **NVIDIA A100 whitepaper** — peak TFLOPS for BF16, memory bandwidth (1.5–2 TB/s), L2 cache size (40 MB).
+- **NVIDIA H100 (Hopper) whitepaper** — peak TFLOPS for BF16 (989 dense) and FP8 (1,979 dense), memory bandwidth (3.35 TB/s HBM3), L2 cache size (50 MB).
 - **PyTorch docs: `torch.cuda` memory tools** — `memory_allocated`, `max_memory_allocated`, `memory_summary`, `memory_history`.
 
 ---
@@ -62,7 +62,7 @@ master (FP32)  4 B    ← present in classic mixed precision; omitted in pure-BF
 total         16 B per param (with master) or 12 B (without)
 ```
 
-So a 7B model in BF16 + AdamW with master weights needs `7e9 * 16 ≈ 112 GB` *just for the static state*. Won't fit on one A100 (80 GB). You either need ZeRO-2+ (shard optimizer states) or tensor parallel.
+So a 7B model in BF16 + AdamW with master weights needs `7e9 * 16 ≈ 112 GB` *just for the static state*. Won't fit on one H100 (80 GB). You either need ZeRO-2+ (shard optimizer states) or tensor parallel.
 
 ### 3. Activation memory is the lever you actually pull
 
@@ -87,7 +87,7 @@ When you can't fit:
 | **Reduce batch size** | tokens/sec (and effective batch — needs grad accum) | activations linearly |
 | **Activation checkpointing** | ~30% extra compute | activations by ~L× (per-block) |
 | **Gradient checkpointing of attention** | even more compute | activation peak around attention |
-| **Lower precision (FP8)** | needs H100; quality risk | ~2× for weights/grads |
+| **Lower precision (FP8)** | quality risk; calibration | ~2× for weights/grads (native Hopper FP8) |
 | **ZeRO / FSDP** | comm | weights/grads/optimizer linearly in world size |
 | **Tensor parallel** | comm | weights/activations linearly in TP size |
 
@@ -101,7 +101,7 @@ For a kernel doing `f` FLOPs on `b` bytes of memory traffic, *arithmetic intensi
 achievable_flops_per_second = min(peak_flops, peak_bandwidth * arithmetic_intensity)
 ```
 
-On A100 BF16: peak 312 TFLOPS, peak HBM BW 1.55 TB/s. Crossover intensity ≈ 200 FLOPs/B.
+On H100 BF16: peak 989 TFLOPS, peak HBM BW 3.35 TB/s. Crossover intensity ≈ 295 FLOPs/B.
 
 - Matmul on big square matrices: intensity scales like the matrix side. Easily 200+. Compute-bound.
 - Element-wise ops (layer norm, residuals, activations): intensity ≈ 1–2. Bandwidth-bound.
@@ -113,7 +113,7 @@ The implication: when you're trying to speed something up, the first question is
 
 Vanilla attention computes `softmax(Q K^T / √d) V` by *materializing* `Q K^T` and the softmax output, each of size `S × S` per head per layer. For long S this is huge. FlashAttention tiles the computation along S, keeps the running max and sum for the online softmax, and never writes the full `S × S` intermediate to HBM. Speedup comes mostly from avoiding HBM traffic; memory savings are dramatic.
 
-On A100, `F.scaled_dot_product_attention(..., is_causal=True)` dispatches to FlashAttention 2 automatically (provided `q, k, v` shapes are right). You generally don't need to pip-install `flash-attn` until later chapters.
+On H100, `F.scaled_dot_product_attention(..., is_causal=True)` dispatches to FlashAttention 2 automatically (provided `q, k, v` shapes are right). You generally don't need to pip-install `flash-attn` until later chapters; the Hopper-tuned FlashAttention 3 lives in `flash-attn`'s `hopper/` build, which you'll meet in Chapter 11.
 
 ---
 
@@ -158,7 +158,7 @@ Your prediction should land within ±15% of the measured number. If it's wildly 
 
 In [`mfu_sweep.py`](mfu_sweep.py), for the `small` preset, sweep `(batch_size ∈ {4, 8, 16, 32, 64}) × (seq_len ∈ {512, 1024, 2048, 4096})`. For each cell, print tokens/sec and MFU. Skip configurations that OOM.
 
-You should see MFU rise with batch size (kernel launch overhead amortizes) and rise then plateau with seq length (FlashAttention keeps things compute-bound). The "best" cell on an A100 for this model is usually around `(B=32, S=2048)` → 35–45% MFU.
+You should see MFU rise with batch size (kernel launch overhead amortizes) and rise then plateau with seq length (FlashAttention keeps things compute-bound). The "best" cell on an H100 for this model is usually around `(B=32, S=2048)` → 25–35% MFU (a 125M model in BF16 leaves H100's tensor cores partly idle — you need bigger models, or FP8, to push the percentage higher).
 
 **Deliverable:** Heatmap in `mfu_heatmap.png`. Write a paragraph identifying the dominant bottleneck for each regime: small B → launch overhead; small S → low arithmetic intensity; large B+S → memory bandwidth.
 
@@ -199,7 +199,7 @@ You should see FlashAttention use much less memory (no S×S materialized) and ru
 3. What is the arithmetic intensity of a layer norm? Why is it bandwidth-bound?
 4. What's the MFU formula for a transformer at long context, and where does the attention term come from?
 5. Activation checkpointing: how do you decide *which* blocks to checkpoint when you can't afford to checkpoint all of them?
-6. Given a 7B model and 4× A100-80GB, sketch a parallelism strategy. Argue your TP/PP/DP degrees.
+6. Given a 7B model and 8× H100-80GB, sketch a parallelism strategy. Argue your TP/PP/DP degrees.
 
 ---
 

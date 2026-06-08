@@ -1,6 +1,6 @@
 """NCCL collective sweep. Run with:
 
-    torchrun --standalone --nproc_per_node=4 nccl_bench.py
+    torchrun --standalone --nproc_per_node=8 nccl_bench.py
 
 Reports algbw and busbw for all_reduce / all_gather / reduce_scatter at sizes from 1 MiB
 to 1 GiB. This is the script that tells you, for your specific node, the *effective*

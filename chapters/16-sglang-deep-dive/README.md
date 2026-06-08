@@ -1,6 +1,6 @@
 # Chapter 16 — SGLang Deep Dive & Contributions
 
-**Hardware target:** 4× A100-80GB; some experiments degrade gracefully to fewer.
+**Hardware target:** 8× H100-80GB; some experiments degrade gracefully to fewer.
 **Time budget:** 4 weeks.
 **Prerequisites:** Chapter 15 — you've done a vLLM source tour.
 
@@ -235,7 +235,7 @@ This is the kind of writeup that lands in an interview presentation. Polish it.
 
 ## Deliverables before moving on
 
-- SGLang serving works on 4×A100.
+- SGLang serving works on 8×H100.
 - Runtime tour and Mini-SGLang writeup.
 - RadixAttention reproduction with comparison to vLLM.
 - Profile screenshots.

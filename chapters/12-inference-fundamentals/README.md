@@ -42,7 +42,7 @@ A request goes through two phases:
 - **Prefill**: process the prompt (`P` tokens). Compute: `O(P * params)` for the forward pass. This is *compute-bound* — same physics as training a batch of size 1 with sequence P.
 - **Decode**: generate one new token at a time. Each step processes 1 new token, but must attend over the full context (P + already-generated). Compute: `O(1 * params)` per step. This is *bandwidth-bound* — you read all the weights for 1 token of work.
 
-For a 7B model, prefill of a 2000-token prompt is one big batch-1 forward (~25 ms on A100). Decode for 200 generated tokens is 200 separate forward passes, each ~5 ms, totaling ~1 second. **The decode phase is where most of the wall-clock time goes** for a typical chat-length response.
+For a 7B model, prefill of a 2000-token prompt is one big batch-1 forward (~50 ms on H100 — ~28 TFLOP of compute at roughly half of peak). Decode for 200 generated tokens is 200 separate forward passes, each ~5 ms (you re-read all ~14 GB of BF16 weights per token, so it's pinned near HBM bandwidth), totaling ~1 second. **The decode phase is where most of the wall-clock time goes** for a typical chat-length response.
 
 ### 2. The KV cache
 

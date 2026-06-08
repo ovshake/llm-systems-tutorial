@@ -1,6 +1,6 @@
 # LLM Systems — A Hands-On Course
 
-This course turns `ROADMAP.md` into 19 chapters you can work through on a single 4×A100-80GB node. Every chapter has a *read* block (a long-form README with concepts + references) and an *implement* block (a runnable baseline plus exercises that make the baseline measurably better, or expose where it breaks).
+This course turns `ROADMAP.md` into 19 chapters you can work through on a single 8×H100-80GB node. Every chapter has a *read* block (a long-form README with concepts + references) and an *implement* block (a runnable baseline plus exercises that make the baseline measurably better, or expose where it breaks).
 
 The course assumes you already know PyTorch and the math of a transformer. If "implement attention from scratch in 20 minutes" makes you sweat, do Chapter 01 first regardless of the rest of the roadmap.
 
@@ -51,10 +51,11 @@ Total ≈ 12 months at 12 h/week. Some chapters are explicitly longer; some shor
 
 ## Hardware envelope
 
-This course is designed for **a single 4×A100-80GB node**:
+This course is designed for **a single 8×H100-80GB node** (i.e. a DGX/HGX H100):
 
-- **Total VRAM:** 320 GB. Enough for a 7B BF16 model with full DDP, a 13B with FSDP, or a 30B-ish with FSDP + activation checkpointing + heavy parallelism (8 GPUs would be more comfortable but 4 is fine for the *concepts*).
-- **NVLink/NVSwitch:** 600 GB/s aggregate on a DGX-style box. This is fast enough that intra-node TP (degree 2 or 4) is realistic.
+- **Total VRAM:** 640 GB (8 × 80 GB). DDP replicates full state on every GPU, so it's capped by the per-GPU 80 GB (≈ a 2–3B model with AdamW); FSDP/ZeRO shards across all 8 GPUs and scales with the aggregate — ~20B with FSDP, or a ~40B-class model with FSDP + activation checkpointing + heavy parallelism.
+- **NVLink/NVSwitch:** 900 GB/s aggregate per GPU. All 8 GPUs sit on one NVSwitch fabric, so every GPU-pair gets full bandwidth and intra-node TP up to degree 8 is realistic.
+- **FP8 + Transformer Engine:** Hopper adds native FP8 (E4M3/E5M2) tensor cores at ~2 PFLOPS dense. Chapters 10/11/14 use this for real instead of treating it as "read and defer."
 - **No InfiniBand / multi-node:** We treat multi-node as a thought experiment. The 100B-scale planning in Chapter 18 covers it on paper.
 - **Local storage / network:** Assume you have somewhere to stash a few hundred GB of datasets and checkpoints. If you don't, use TinyStories / Shakespeare-scale data — the principles don't care.
 
@@ -65,9 +66,9 @@ For each chapter we list a "Hardware target" line. If you have fewer GPUs, you c
 ## Conventions
 
 - **Python:** ≥ 3.10, managed with `uv`. Each chapter folder is runnable directly; some pin extra deps in a chapter-local `pyproject.toml` or `requirements.txt`.
-- **Launch commands:** Single GPU: `python script.py`. Multi-GPU: `torchrun --standalone --nproc_per_node=4 script.py`. Multi-node is out of scope.
+- **Launch commands:** Single GPU: `python script.py`. Multi-GPU: `torchrun --standalone --nproc_per_node=8 script.py`. Multi-node is out of scope.
 - **Toy dataset:** `tinyshakespeare` (1 MB plain text). Tokenized with `tiktoken` (GPT-2 BPE) and saved as a single binary file. For chapters that need a real-ish corpus (Chapters 04, 07, 08), we use a subset of `wikitext-103` or `fineweb` streamed from Hugging Face.
-- **Models:** Configurable `tiny / small / medium / large` presets in `shared/utils/model_presets.py`. "Tiny" fits on a 12 GB GPU; "Large" needs the full 4×80 GB.
+- **Models:** Configurable `tiny / small / medium / large` presets in `shared/utils/model_presets.py`. "Tiny" fits on a 12 GB GPU; the largest presets need sharding across several of the 8 GPUs (FSDP or TP).
 - **Logging:** `rich.print` for human output, `wandb` (or `tensorboard`) for runs. Each chapter prints a structured JSON line per step so you can diff runs trivially with `jq`.
 - **Naming:** Files use kebab-case for scripts (`benchmark-all-reduce.py`), snake_case for modules (`fused_kernels.py`). Folders use the `NN-topic-name` form already in use.
 
@@ -79,7 +80,7 @@ You are done with the course when you can do all of these without looking anythi
 
 1. Given a model spec + a target throughput, sketch a parallelism strategy (TP/PP/DP/EP/SP degrees, microbatch, activation checkpointing policy) on a whiteboard, with rough memory and communication math, and identify the likely first bottleneck.
 2. Take a slow training step and use Nsight Systems / the PyTorch profiler to localize the bottleneck to a specific kernel or collective.
-3. Write a Triton kernel for an LLM op (RMSNorm, fused SwiGLU, vocab-parallel softmax, etc.) that beats the eager PyTorch baseline on an A100.
+3. Write a Triton kernel for an LLM op (RMSNorm, fused SwiGLU, vocab-parallel softmax, etc.) that beats the eager PyTorch baseline on an H100.
 4. Implement a working continuous-batching inference loop with a paged KV cache, plus benchmarks for TTFT / ITL / throughput / p99.
 5. Read a vLLM or SGLang issue / PR, reproduce the regression locally, and propose a fix or follow-up benchmark.
 6. Explain DPO, GRPO, and rollout-based RLHF in terms of their *systems* requirements (memory for ref model, KL constraint, asynchronous rollout queue, etc.), not their math.
@@ -172,7 +173,7 @@ uv pip install -e .
 cd chapters/00-setup
 uv pip install -r requirements.txt   # if present
 python verify_environment.py
-torchrun --standalone --nproc_per_node=4 hello_distributed.py
+torchrun --standalone --nproc_per_node=8 hello_distributed.py
 python nvlink_bandwidth.py
 
 # 3. Start Chapter 01

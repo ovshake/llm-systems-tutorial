@@ -1,6 +1,6 @@
 # Chapter 07 — 3D Parallelism with Nanotron / Megatron-LM
 
-**Hardware target:** 4× A100-80GB.
+**Hardware target:** 8× H100-80GB.
 **Time budget:** 3–4 weeks.
 **Prerequisites:** Chapters 03, 04, 05, 06.
 
@@ -42,13 +42,17 @@ Each GPU belongs to several process groups simultaneously:
 - A *PP group*: GPUs that share a slice of layers (size = PP degree).
 - A *DP group*: GPUs that hold replicas of the same TP×PP slice (size = DP degree).
 
-For a 4×A100 node with TP=2, PP=2, DP=1:
+For an 8×H100 node with TP=2, PP=2, DP=2:
 
 ```
-rank 0: TP group {0,1}, PP group {0,2}, DP group {0}
-rank 1: TP group {0,1}, PP group {1,3}, DP group {1}
-rank 2: TP group {2,3}, PP group {0,2}, DP group {2}
-rank 3: TP group {2,3}, PP group {1,3}, DP group {3}
+rank 0: TP group {0,1}, PP group {0,2}, DP group {0,4}
+rank 1: TP group {0,1}, PP group {1,3}, DP group {1,5}
+rank 2: TP group {2,3}, PP group {0,2}, DP group {2,6}
+rank 3: TP group {2,3}, PP group {1,3}, DP group {3,7}
+rank 4: TP group {4,5}, PP group {4,6}, DP group {0,4}
+rank 5: TP group {4,5}, PP group {5,7}, DP group {1,5}
+rank 6: TP group {6,7}, PP group {4,6}, DP group {2,6}
+rank 7: TP group {6,7}, PP group {5,7}, DP group {3,7}
 ```
 
 Nanotron's `ParallelContext` and Megatron-LM's `parallel_state` both create these groups at startup. Every collective in the training loop is scoped to one group.
@@ -61,7 +65,7 @@ Rules of thumb:
 - **PP** — set to fill out the remaining inter-node dimension after TP. PP boundaries are tolerant of slower links.
 - **DP** — set to the leftover. DP is the most efficient form of scaling (each rank has full ownership of compute for its mini-batch).
 
-So for a 64-GPU cluster of 8 DGX-A100 (8 GPUs each), one common layout: TP=8, PP=8, DP=1. For a 7B model on 4 GPUs: TP=4, PP=1, DP=1 (you're not even doing DP — you're just doing TP for memory). For a 13B model on 8 GPUs: TP=2, PP=2, DP=2. Etc.
+So for a 64-GPU cluster of 8 DGX-H100 (8 GPUs each), one common layout: TP=8, PP=8, DP=1. For a 7B model on your 8-GPU node: TP=2, PP=1, DP=4 (TP=2 for a little memory headroom and extra bandwidth, DP=4 for throughput). For a 13B model: TP=4, PP=1, DP=2 (or TP=2, PP=2, DP=2). Etc.
 
 The Ultra-Scale Playbook has a flowchart for this; internalize it.
 
@@ -106,7 +110,7 @@ When you propose a config, sum these up and compare to the available bandwidth. 
 
 Clone Nanotron next to this repo. Follow its quickstart. Train a tiny config on 1 GPU first; confirm the loss falls.
 
-Then run the multi-GPU example with the smallest model that fits — Nanotron exposes `tp`, `pp`, `dp` in its YAML config. Try TP=2, PP=1, DP=2 on your 4-GPU box.
+Then run the multi-GPU example with the smallest model that fits — Nanotron exposes `tp`, `pp`, `dp` in its YAML config. Try TP=2, PP=2, DP=2 on your 8-GPU box.
 
 **Deliverable:** Loss curve, tokens/sec, peak memory in `NOTES.md`.
 
@@ -122,12 +126,12 @@ You should be able to draw the rank-to-group mapping for a (TP=2, PP=2, DP=2) on
 
 ### Exercise 3 — Tune the (TP, PP, DP) for a `medium` model
 
-Using Nanotron, try four configs at world=4:
+Using Nanotron, try four configs at world=8:
 
-1. TP=1, PP=1, DP=4 (= DDP).
-2. TP=4, PP=1, DP=1.
-3. TP=2, PP=2, DP=1.
-4. TP=1, PP=2, DP=2.
+1. TP=1, PP=1, DP=8 (= DDP).
+2. TP=8, PP=1, DP=1 (pure tensor parallel across the node).
+3. TP=2, PP=2, DP=2 (balanced 3D).
+4. TP=2, PP=1, DP=4.
 
 For each: tokens/sec, peak memory per rank, MFU. Hold global batch constant.
 
@@ -178,7 +182,7 @@ This is a classic interview question. Write it up properly.
 
 ## Self-check
 
-1. For a 4-GPU node, when does TP=4 beat TP=2, PP=2?
+1. For an 8-GPU node, when does TP=8 beat TP=2, PP=2, DP=2?
 2. Why do PP boundaries tolerate slower links than TP boundaries?
 3. What is the rank-to-group mapping for (TP=2, PP=2, DP=2) on 8 GPUs?
 4. Why doesn't FSDP-within-DP conflict with TP?

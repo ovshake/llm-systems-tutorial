@@ -1,6 +1,6 @@
 # Chapter 00 — Setup & GPU Sanity Checks
 
-**Hardware target:** 1 to 4 GPUs (works on as little as one A100; ideal is the full 4×A100-80GB).
+**Hardware target:** 1 to 8 GPUs (works on as little as one H100; ideal is the full 8×H100-80GB).
 **Time budget:** 1 week.
 **Prerequisites:** Linux box with CUDA-capable GPUs and recent NVIDIA driver. You are comfortable with `bash`, `git`, and `uv`.
 
@@ -13,7 +13,7 @@ Half of the bugs in distributed training are environment bugs masquerading as ML
 This chapter is a checklist for that. After it, you should be able to:
 
 - State your driver version, CUDA toolkit version, PyTorch CUDA version, and confirm they're consistent.
-- Run a distributed hello world and see all 4 ranks print.
+- Run a distributed hello world and see all 8 ranks print.
 - Measure NVLink and PCIe bandwidth between each pair of GPUs and recognize an unhealthy topology.
 - Measure NCCL all-reduce / all-gather / reduce-scatter bandwidth and compare to the hardware peak.
 - Boot a PyTorch profiler trace and open it in `chrome://tracing`.
@@ -57,8 +57,8 @@ A common bug: PyTorch was built against CUDA 12.1, you have driver 525 (which is
 
 Within a node, GPUs can talk to each other through:
 
-- **NVLink / NVSwitch** — high-bandwidth, direct GPU-GPU. A100 SXM4 has 12 NVLink lanes per GPU, 50 GB/s per direction per lane → ~600 GB/s aggregate per GPU. In a DGX A100 there are NVSwitches so any GPU-pair gets full bandwidth.
-- **PCIe** — fall-back path. PCIe Gen4 x16 ≈ 25 GB/s each direction. ~30× slower than NVLink for collectives.
+- **NVLink / NVSwitch** — high-bandwidth, direct GPU-GPU. H100 SXM5 has 18 NVLink 4 links per GPU, 25 GB/s per direction per link → ~900 GB/s aggregate (bidirectional) per GPU, i.e. ~450 GB/s each way. In a DGX H100 there are NVSwitches so any GPU-pair gets full bandwidth.
+- **PCIe** — fall-back path. PCIe Gen5 x16 ≈ 50 GB/s each direction. ~9× slower than NVLink for collectives.
 - **InfiniBand / RoCE** — between nodes. We don't use this.
 
 Run `nvidia-smi topo -m`. If you see `NV12` or `NV4` between every GPU pair, you have NVLink. If you see `PXB` / `PHB` instead, you're on PCIe and tensor parallelism will be brutal.
@@ -73,7 +73,7 @@ Run `nvidia-smi topo -m`. If you see `NV12` or `NV4` between every GPU pair, you
 | `all_to_all`     | Each rank sends a different chunk to every other rank     | MoE expert routing |
 | `broadcast`      | One rank sends, all receive                               | Initialization, checkpoint loading |
 
-The cost of each on a ring of N GPUs and tensor of size B bytes is roughly `2B(N-1)/N` (all-reduce) or `B(N-1)/N` (all-gather, reduce-scatter). On NVLink with 600 GB/s, an all-reduce of a 1 GB BF16 tensor on 4 GPUs takes roughly `2 * 1 GB * 3 / 4 / 600 GB/s ≈ 2.5 ms`.
+The cost of each on a ring of N GPUs and tensor of size B bytes is roughly `2B(N-1)/N` (all-reduce) or `B(N-1)/N` (all-gather, reduce-scatter). On NVLink with 900 GB/s, an all-reduce of a 1 GB BF16 tensor on 8 GPUs takes roughly `2 * 1 GB * 7 / 8 / 900 GB/s ≈ 1.9 ms` (the `(N-1)/N` factor rises toward 1 as you add GPUs, so the per-GPU bus cost barely grows from 4 to 8).
 
 We'll measure this for real.
 
@@ -120,7 +120,7 @@ python verify_environment.py
 
 Read the output. It prints driver, CUDA, PyTorch, NCCL, and Triton versions, plus per-GPU info. Confirm:
 
-- All 4 GPUs are visible.
+- All 8 GPUs are visible.
 - BF16 is supported.
 - The reported NCCL version matches the one your PyTorch was built against (warning printed if not).
 
@@ -129,10 +129,10 @@ Read the output. It prints driver, CUDA, PyTorch, NCCL, and Triton versions, plu
 ### Exercise 2 — Distributed hello world
 
 ```bash
-torchrun --standalone --nproc_per_node=4 hello_distributed.py
+torchrun --standalone --nproc_per_node=8 hello_distributed.py
 ```
 
-Each rank should print its rank, local rank, and device. They should all see `world_size=4`. The script also does a small `all_reduce(1)` and asserts it returns 4 on every rank — a baseline that NCCL works at all.
+Each rank should print its rank, local rank, and device. They should all see `world_size=8`. The script also does a small `all_reduce(1)` and asserts it returns 8 on every rank — a baseline that NCCL works at all.
 
 **Deliverable:** Save the output to `NOTES.md`. Note which rank ran first.
 
@@ -142,7 +142,7 @@ Each rank should print its rank, local rank, and device. They should all see `wo
 python nvlink_bandwidth.py
 ```
 
-This script copies a 1 GB tensor between every pair of GPUs and reports throughput. You'll get a 4×4 matrix.
+This script copies a 1 GB tensor between every pair of GPUs and reports throughput. You'll get an 8×8 matrix.
 
 **Deliverable:**
 1. Save the matrix to `NOTES.md`.
@@ -152,18 +152,18 @@ This script copies a 1 GB tensor between every pair of GPUs and reports throughp
 ### Exercise 4 — NCCL collectives benchmark
 
 ```bash
-torchrun --standalone --nproc_per_node=4 nccl_bench.py
+torchrun --standalone --nproc_per_node=8 nccl_bench.py
 ```
 
 This measures `all_reduce`, `all_gather`, and `reduce_scatter` over a sweep of message sizes from 1 MiB to 1 GiB. Output looks like:
 
 ```
-all_reduce     size=  256.0 MiB  t=  1.234 ms  algbw=  217.6 GB/s  busbw=  326.5 GB/s
+all_reduce     size=  256.0 MiB  t=  0.979 ms  algbw=  274.0 GB/s  busbw=  479.5 GB/s
 ```
 
 **Deliverable:**
 1. Save the full table to `NOTES.md`.
-2. Compute the bus bandwidth as a percentage of NVLink peak (600 GB/s aggregate). You should see busbw saturate near 200–280 GB/s on a DGX-A100 — the link is shared.
+2. Compute the bus bandwidth as a percentage of NVLink peak (900 GB/s aggregate). You should see busbw saturate near 370–480 GB/s on a DGX-H100 — the link is shared.
 3. Plot algbw vs message size in `bandwidth_plot.png` (use matplotlib). Note where the curve plateaus — this is the message size above which the link is the bottleneck rather than launch overhead.
 
 ### Exercise 5 — Profiler sanity

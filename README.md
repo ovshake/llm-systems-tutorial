@@ -9,7 +9,7 @@ A hands-on course taking a competent PyTorch user to *LLM systems / performance 
 - **Shared utilities:** [`shared/utils/`](shared/utils/) — timing, memory, NCCL bandwidth helpers reused across chapters.
 - **Your scratchpad:** [`tasks/lessons.md`](tasks/lessons.md) — write down every correction so the same mistake doesn't ship twice.
 
-Target hardware: **4×A100-80GB, single node, NVLink/NVSwitch interconnect.** Most chapters degrade gracefully on smaller setups.
+Target hardware: **8×H100-80GB, single node, NVLink/NVSwitch interconnect (DGX/HGX H100).** Most chapters degrade gracefully on smaller setups.
 
 ```bash
 uv venv --python 3.11 && source .venv/bin/activate
