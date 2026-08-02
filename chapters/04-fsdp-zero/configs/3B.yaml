@@ -1,0 +1,26 @@
+# 3B preset for Exercise 6 (activation checkpointing under FSDP).
+# At (micro_batch=16, seq_len=2048) on 8xH100 with FULL_SHARD:
+#   without --activation-checkpoint  -> ~85 GiB/GPU of activations -> OOM
+#   with    --activation-checkpoint  -> ~1 block stashed           -> fits comfortably
+# Run it both ways to produce the deliverable table. FSDP shards params/grads/optimizer
+# but NOT activations, so this OOM crossover is set by micro_batch*seq_len, not GPU count.
+#
+# Activation checkpointing is applied at the FSDP level via the --activation-checkpoint
+# CLI flag, NOT the model's use_grad_checkpoint, so we leave that at its default (off).
+seed: 0
+model:
+  vocab_size: 50257
+  n_layers: 32
+  n_heads: 20
+  n_kv_heads: 20
+  hidden_size: 2560
+  intermediate_size: 6912
+  context_length: 2048
+
+data:
+  train_path: ../01-transformer-from-scratch/data/tinyshakespeare/train.bin
+
+seq_len: 2048
+micro_batch: 16
+total_steps: 50
+lr: 0.0003

@@ -18,6 +18,7 @@ import torch
 import torch.distributed as dist
 import yaml
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.profiler import ProfilerActivity, profile, record_function, schedule
 
 sys.path.insert(0, "../01-transformer-from-scratch")
 from data import TokenizedBinaryDataset  # noqa: E402
@@ -60,43 +61,58 @@ def main() -> None:
         )
 
     accum = cfg.get("accum_steps", 1)
+    wait, warmup, active = 1, 1, 3 
+    with profile(
+        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], 
+        schedule=schedule(wait=wait, warmup=warmup, active=active, repeat=1), 
+        record_shapes=True, 
+        with_stack=False,
+    ) as prof:
 
-    for step in range(cfg["total_steps"]):
-        t0 = time.perf_counter()
-        loss_sum = 0.0
-        for ms in range(accum):
-            x, y = train_ds.sample_batch(cfg["micro_batch"], device)
-            # `no_sync` skips the gradient all-reduce on non-last accumulation steps.
-            cm = model.no_sync() if ms < accum - 1 else _noop_cm()
-            with cm:
-                with torch.amp.autocast("cuda", dtype=torch.bfloat16):
-                    _, loss = model(x, y)
-                (loss / accum).backward()
-            loss_sum += loss.item() / accum
+        for step in range(cfg["total_steps"]):
+            t0 = time.perf_counter()
+            loss_sum = 0.0
+            for ms in range(accum):
+                with record_function("sample_batch"):
+                    x, y = train_ds.sample_batch(cfg["micro_batch"], device)
+                # `no_sync` skips the gradient all-reduce on non-last accumulation steps.
+                cm = model.no_sync() if ms < accum - 1 else _noop_cm()
+                with cm:
+                    with torch.amp.autocast("cuda", dtype=torch.bfloat16) and record_function("loss_comp"): 
+                        _, loss = model(x, y)
+                    with record_function("backward"):
+                        (loss / accum).backward()
+                loss_sum += loss.item() / accum
 
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optim.step()
-        optim.zero_grad(set_to_none=True)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            with record_function("optim_step"):
+                optim.step()
+                optim.zero_grad(set_to_none=True)
 
-        torch.cuda.synchronize()
-        dt = time.perf_counter() - t0
+            torch.cuda.synchronize()
+            dt = time.perf_counter() - t0
 
-        if rank == 0 and step % 10 == 0:
-            tokens = cfg["micro_batch"] * cfg["seq_len"] * world * accum
-            tps = tokens / dt
-            mfu = estimate_mfu(
-                tokens_per_second=tps,
-                n_params=n_params,
-                seq_len=cfg["seq_len"],
-                n_layers=model_cfg.n_layers,
-                hidden_size=model_cfg.hidden_size,
-                n_gpus=world,
-            )
-            print(
-                f"step {step:>5d} | loss {loss_sum:>7.3f} | "
-                f"step_ms {dt * 1000:>6.1f} | tok/s {tps:>9.0f} | mfu {mfu * 100:>4.1f}%"
-            )
+            if rank == 0 and step % 10 == 0:
+                tokens = cfg["micro_batch"] * cfg["seq_len"] * world * accum
+                tps = tokens / dt
+                mfu = estimate_mfu(
+                    tokens_per_second=tps,
+                    n_params=n_params,
+                    seq_len=cfg["seq_len"],
+                    n_layers=model_cfg.n_layers,
+                    hidden_size=model_cfg.hidden_size,
+                    n_gpus=world,
+                )
+                print(
+                    f"step {step:>5d} | loss {loss_sum:>7.3f} | "
+                    f"step_ms {dt * 1000:>6.1f} | tok/s {tps:>9.0f} | mfu {mfu * 100:>4.1f}%"
+                )
+            prof.step()
+            if step == wait + warmup + active:
+                break 
 
+    if rank == 0:
+        prof.export_chrome_trace('trace.json')
     dist.destroy_process_group()
 
 

@@ -9,14 +9,14 @@ model:
   context_length: 1024
   rope_base: 10000.0
   dropout: 0.0
-  use_grad_checkpoint: false   # flip on for Exercise 4
+  use_grad_checkpoint: true   # flip on for Exercise 4
 
 data:
   train_path: data/tinyshakespeare/train.bin
   val_path:   data/tinyshakespeare/val.bin
 
 seq_len: 1024
-micro_batch: 32
+micro_batch: 8
 accum_steps: 1
 total_steps: 5000
 warmup_steps: 200
@@ -28,6 +28,6 @@ grad_clip: 1.0
 bf16: true
 compile: false
 log_every: 20
-save_every: 1000
+save_every: 200
 
-out_dir: runs/small
+out_dir: /scratch/abhishek.maiti/llm-systems-tutorial/runs/small

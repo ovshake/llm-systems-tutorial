@@ -49,3 +49,15 @@ ncu-reports/
 profiles/
 logs/
 out/
+
+# Local venv symlink (the .venv/ rule above only matches a real dir, not this symlink)
+.venv
+
+# Profiler chrome traces
+trace.json
+
+# Downloaded datasets (raw corpora; the .bin tensors are already ignored above)
+chapters/*/data/
+
+# SLURM launch bookkeeping written by the demo launchers
+.last_jobid*

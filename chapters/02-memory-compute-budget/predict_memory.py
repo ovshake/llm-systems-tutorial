@@ -26,7 +26,7 @@ from shared.utils.model_presets import PRESETS, ModelPreset
 # With FlashAttention this is roughly 10 bytes (residual + attn out + ffn intermediate
 # in BF16). Without FlashAttention you'd add ~4 bytes per layer per token per S dim for
 # the attention scratch — but we always use Flash here.
-ACTIVATION_BYTES_PER_LAYER_TOKEN_H = 10.0
+ACTIVATION_BYTES_PER_LAYER_TOKEN_H = 34.0
 
 
 def predict_memory(

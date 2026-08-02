@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.profiler import record_function
 
 
 @dataclass
@@ -44,7 +45,7 @@ class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
+        self.weight = nn.Parameter(torch.ones(dim, dtype=torch.float32))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # noqa: D401
         # TODO Exercise 1: implement RMSNorm.
@@ -53,7 +54,11 @@ class RMSNorm(nn.Module):
         #   return self.weight * x / rms
         # Cast to fp32 for the norm computation, then back to x.dtype for the output.
         # This matches the standard Llama implementation and is numerically stable in BF16.
-        raise NotImplementedError("Implement RMSNorm.forward (Exercise 1.2)")
+        x_dtype = x.dtype
+        x = x.to(torch.float32)
+        rms = torch.sqrt(torch.mean(x * x, dim=-1) + self.eps)
+        rms_normed = self.weight * x / rms[..., None]
+        return rms_normed.to(x_dtype)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -79,8 +84,23 @@ def apply_rope(x: torch.Tensor, cos_sin: torch.Tensor) -> torch.Tensor:
         x'_{2k}   = x_{2k} * cos - x_{2k+1} * sin
         x'_{2k+1} = x_{2k} * sin + x_{2k+1} * cos
     """
-    # TODO Exercise 1: implement rotary embedding.
-    raise NotImplementedError("Implement apply_rope (Exercise 1.1)")
+    B, H, T, head_dim = x.shape
+    x_pairs = x.view(B, H, T, head_dim // 2, 2)
+    x0 = x_pairs[..., 0]
+    x1 = x_pairs[..., 1]
+    # Cast the rotary tables to x's dtype so RoPE preserves it. A float32 cos/sin buffer
+    # would otherwise promote bf16 q/k back to float32 — harmless under autocast (which
+    # re-casts inside SDPA) but it breaks the no-autocast bf16 path (DeepSpeed) with a
+    # "q/k vs v dtype mismatch" in scaled_dot_product_attention.
+    cos = cos_sin[..., 0].to(x.dtype)
+    sin = cos_sin[..., 1].to(x.dtype)
+    cos = cos[None, None, ...] 
+    sin = sin[None, None, ...]
+    y0 = x0 * cos - x1 * sin
+    y1 = x0 * sin + x1 * cos 
+    y = torch.stack([y0, y1], dim=-1)
+    y = y.view(B, H, T, head_dim) 
+    return y
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -115,7 +135,20 @@ class Attention(nn.Module):
         #   5. Use F.scaled_dot_product_attention with is_causal=True. On H100 this
         #      dispatches to FlashAttention; on older GPUs it falls back to the math kernel.
         #   6. Reshape back to (B, T, C), apply the output projection.
-        raise NotImplementedError("Implement Attention.forward (Exercise 1.3)")
+        q, k, v = self.wq(x), self.wk(x), self.wv(x) # C = n_heads * head_dim = hidden_size 
+        B, T, C = x.shape
+        q = q.view(B, self.n_heads, T, self.head_dim)
+        k = k.view(B, self.n_kv_heads, T, self.head_dim)
+        v = v.view(B, self.n_kv_heads, T, self.head_dim) 
+        q = apply_rope(q, cos_sin)
+        k = apply_rope(k, cos_sin)
+        if self.n_rep > 1:
+            k = k.repeat_interleave(self.n_rep, dim=1)
+            v = v.repeat_interleave(self.n_rep, dim=1)
+        
+        attn = F.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout, is_causal=True)
+        attn = attn.reshape(B, T, self.n_heads * self.head_dim)
+        return self.wo(attn)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -139,7 +172,7 @@ class SwiGLUMLP(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # TODO Exercise 1: implement SwiGLU.
-        raise NotImplementedError("Implement SwiGLUMLP.forward (Exercise 1.4)")
+        return self.w3(F.silu(self.w1(x)) * self.w2(x))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -156,9 +189,26 @@ class Block(nn.Module):
         self.mlp = SwiGLUMLP(cfg)
 
     def forward(self, x: torch.Tensor, cos_sin: torch.Tensor) -> torch.Tensor:
-        x = x + self.attn(self.norm1(x), cos_sin)
-        x = x + self.mlp(self.norm2(x))
-        return x
+        with record_function("norm1"):
+            norm_x = self.norm1(x) 
+        with record_function("attention"):
+            attn_x = self.attn(norm_x, cos_sin) 
+        with record_function("res1"):
+            x = attn_x + x 
+        
+        with record_function("norm2"):
+            norm_x = self.norm2(x) 
+        
+        with record_function("mlp"):
+            mlp_x = self.mlp(norm_x) 
+        
+        with record_function("res2"):
+            x = mlp_x + x 
+
+        return x 
+        # x = x + self.attn(self.norm1(x), cos_sin)
+        # x = x + self.mlp(self.norm2(x))
+        # return x
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -208,13 +258,28 @@ class GPT(nn.Module):
         # TODO Exercise 1: implement the full forward.
         # Steps:
         #   1. Embed input_ids -> (B, T, C).
-        #   2. Slice cos_sin for the current T.
+        #   2. Slice cos_sin for the current T. The shape of cos_sin is (T, head_dim/2, 2).
         #   3. Pass through every block. If cfg.use_grad_checkpoint, wrap each block call
         #      in torch.utils.checkpoint.checkpoint with use_reentrant=False.
         #   4. norm_f, then lm_head to get logits (B, T, V).
         #   5. If targets is provided, compute cross-entropy with F.cross_entropy. Reshape
         #      logits to (B*T, V) and targets to (B*T) for the call.
-        raise NotImplementedError("Implement GPT.forward (Exercise 1.5)")
+
+        toks = self.tok_embed(input_ids)
+        cos_sin = self.cos_sin[None, :input_ids.shape[1], ...] 
+        x = toks 
+        if self.cfg.use_grad_checkpoint:
+            for block in self.blocks:
+                x = torch.utils.checkpoint.checkpoint(block, x, cos_sin)
+        else:
+            for block in self.blocks:
+                x = block(x, cos_sin)
+        x = self.norm_f(x) 
+        logits = self.lm_head(x) 
+        if targets is not None:
+            loss = F.cross_entropy(logits.view(-1, logits.shape[-1]), targets.view(-1))
+            return logits, loss
+        return logits, None
 
     @torch.no_grad()
     def generate(
